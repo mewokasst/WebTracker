@@ -1,0 +1,94 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>TaskTrack — Register</title>
+<link rel="stylesheet" href="./css/style.css">
+</head>
+<body>
+
+<div class="auth-shell">
+  <div class="auth-card">
+    <div class="eyebrow">TaskTrack</div>
+    <h1>Create your account</h1>
+    <p>Set up an account to start tracking your deadlines.</p>
+
+    <div id="error-box" class="form-error"></div>
+
+    <form id="register-form">
+      <div class="field">
+        <label for="name">Full name</label>
+        <input type="text" id="name" required>
+      </div>
+      <div class="field">
+        <label for="email">Email</label>
+        <input type="email" id="email" required>
+      </div>
+      <div class="field">
+        <label for="password">Password</label>
+        <input type="password" id="password" minlength="6" required>
+      </div>
+      <div class="field">
+        <label for="confirm">Confirm password</label>
+        <input type="password" id="confirm" minlength="6" required>
+      </div>
+      <button type="submit" class="btn btn-block">Register</button>
+    </form>
+
+    <p class="form-hint">Already have an account? <a href="index.html">Log in</a></p>
+  </div>
+</div>
+
+<script type="module">
+  import { registerUser, friendlyAuthError } from "./js/auth.js";
+
+  const form = document.getElementById("register-form");
+  const errorBox = document.getElementById("error-box");
+
+  form.addEventListener("submit", async (e) => {
+    e.preventDefault();
+    errorBox.classList.remove("visible");
+
+    const name = document.getElementById("name").value.trim();
+    const email = document.getElementById("email").value.trim();
+    const password = document.getElementById("password").value;
+    const confirm = document.getElementById("confirm").value;
+
+    if (!name || !email || !password) {
+      errorBox.textContent = "All fields are required.";
+      errorBox.classList.add("visible");
+      return;
+    }
+    if (password !== confirm) {
+      errorBox.textContent = "Passwords do not match.";
+      errorBox.classList.add("visible");
+      return;
+    }
+
+    try {
+      const { session } = await registerUser({ name, email, password });
+      if (session) {
+        // Signed in immediately (email confirmation is off in your Supabase project)
+        window.location.href = "dashboard.html";
+      } else {
+        // Supabase has "Confirm email" turned on — account exists but isn't logged in yet
+        errorBox.textContent = "Account created! Check your email to confirm it, then log in.";
+        errorBox.style.background = "#E2EBE0";
+        errorBox.style.color = "#21391F";
+        errorBox.style.borderColor = "#2F5233";
+        errorBox.classList.add("visible");
+        form.reset();
+      }
+    } catch (err) {
+      errorBox.style.background = "";
+      errorBox.style.color = "";
+      errorBox.style.borderColor = "";
+      errorBox.textContent = friendlyAuthError(err);
+      errorBox.classList.add("visible");
+    }
+  });
+</script>
+
+</body>
+</html>

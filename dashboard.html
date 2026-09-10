@@ -1,0 +1,124 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>TaskTrack — Dashboard</title>
+<link rel="stylesheet" href="./css/style.css">
+</head>
+<body>
+
+<div class="app-shell">
+  <aside class="sidebar">
+    <div class="brand">TaskTrack</div>
+    <nav>
+      <a href="dashboard.html" class="active">Dashboard</a>
+      <a href="tasks.html">My Tasks</a>
+      <a href="profile.html">Profile</a>
+      <a href="admin.html" id="admin-link" style="display:none;">Admin Panel</a>
+    </nav>
+    <div class="user-block">
+      <div id="user-name">Loading…</div>
+      <button class="logout-btn" id="logout-btn">Log out</button>
+    </div>
+  </aside>
+
+  <main class="main">
+    <div class="page-header">
+      <h1>Dashboard</h1>
+    </div>
+
+    <div class="summary-row">
+      <div class="summary-card">
+        <div class="num" id="stat-upcoming">–</div>
+        <div class="label">Upcoming tasks</div>
+      </div>
+      <div class="summary-card overdue">
+        <div class="num" id="stat-overdue">–</div>
+        <div class="label">Overdue tasks</div>
+      </div>
+      <div class="summary-card">
+        <div class="num" id="stat-done">–</div>
+        <div class="label">Completed</div>
+      </div>
+    </div>
+
+    <div class="section-title">
+      <h2>Shared class deadlines</h2>
+    </div>
+    <div id="shared-deadlines-list">
+      <p class="text-muted">Loading…</p>
+    </div>
+
+    <div class="section-title mt-lg">
+      <h2>Due soon</h2>
+      <a href="tasks.html">View all tasks →</a>
+    </div>
+    <div id="due-soon-list">
+      <p class="text-muted">Loading…</p>
+    </div>
+  </main>
+</div>
+
+<script type="module">
+  import { requireAuth, logoutUser } from "./js/auth.js";
+  import { getUserTasks, isOverdue, isDueSoon } from "./js/tasks.js";
+  import { getAllSharedDeadlines } from "./js/shared-deadlines.js";
+
+  document.getElementById("logout-btn").addEventListener("click", logoutUser);
+
+  requireAuth(async (user, profile) => {
+    document.getElementById("user-name").textContent = profile?.name || user.email;
+    if (profile?.role === "admin") {
+      document.getElementById("admin-link").style.display = "block";
+    }
+
+    // ---- Task stats ----
+    const tasks = await getUserTasks(user.id);
+    const upcoming = tasks.filter(t => t.status !== "done" && !isOverdue(t));
+    const overdue = tasks.filter(isOverdue);
+    const done = tasks.filter(t => t.status === "done");
+
+    document.getElementById("stat-upcoming").textContent = upcoming.length;
+    document.getElementById("stat-overdue").textContent = overdue.length;
+    document.getElementById("stat-done").textContent = done.length;
+
+    // ---- Due soon list ----
+    const dueSoon = tasks.filter(isDueSoon);
+    const dueSoonEl = document.getElementById("due-soon-list");
+    if (dueSoon.length === 0) {
+      dueSoonEl.innerHTML = `<div class="empty-state">Nothing due in the next 2 days.</div>`;
+    } else {
+      dueSoonEl.innerHTML = dueSoon.map(t => `
+        <div class="deadline-item">
+          <strong>${escapeHtml(t.title)}</strong>
+          <div class="meta">${escapeHtml(t.subject)} · due ${t.dueDate}</div>
+        </div>
+      `).join("");
+    }
+
+    // ---- Shared deadlines ----
+    const shared = await getAllSharedDeadlines();
+    const sharedEl = document.getElementById("shared-deadlines-list");
+    if (shared.length === 0) {
+      sharedEl.innerHTML = `<div class="empty-state">No shared deadlines posted yet.</div>`;
+    } else {
+      sharedEl.innerHTML = shared.map(d => `
+        <div class="deadline-item">
+          <strong>${escapeHtml(d.title)}</strong>
+          <div class="meta">${escapeHtml(d.subjectOrScope)} · due ${d.dueDate}</div>
+          ${d.description ? `<div>${escapeHtml(d.description)}</div>` : ""}
+        </div>
+      `).join("");
+    }
+  });
+
+  function escapeHtml(str) {
+    const div = document.createElement("div");
+    div.textContent = str ?? "";
+    return div.innerHTML;
+  }
+</script>
+
+</body>
+</html>

@@ -1,0 +1,263 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>TaskTrack — My Tasks</title>
+<link rel="stylesheet" href="./css/style.css">
+</head>
+<body>
+
+<div class="app-shell">
+  <aside class="sidebar">
+    <div class="brand">TaskTrack</div>
+    <nav>
+      <a href="dashboard.html">Dashboard</a>
+      <a href="tasks.html" class="active">My Tasks</a>
+      <a href="profile.html">Profile</a>
+      <a href="admin.html" id="admin-link" style="display:none;">Admin Panel</a>
+    </nav>
+    <div class="user-block">
+      <div id="user-name">Loading…</div>
+      <button class="logout-btn" id="logout-btn">Log out</button>
+    </div>
+  </aside>
+
+  <main class="main">
+    <div class="page-header">
+      <h1>My Tasks</h1>
+      <button class="btn" id="new-task-btn">+ Add Task</button>
+    </div>
+
+    <!-- Add/Edit task form (hidden until needed) -->
+    <div class="card" id="task-form-card" style="display:none; margin-bottom:1.5rem;">
+      <h3 id="form-title">New Task</h3>
+      <div id="task-form-error" class="form-error"></div>
+      <form id="task-form">
+        <input type="hidden" id="task-id">
+        <div class="field">
+          <label for="title">Title</label>
+          <input type="text" id="title" required>
+        </div>
+        <div class="field">
+          <label for="subject">Subject</label>
+          <input type="text" id="subject" placeholder="e.g. Networking 101">
+        </div>
+        <div class="field">
+          <label for="dueDate">Due date</label>
+          <input type="date" id="dueDate" required>
+        </div>
+        <div class="field">
+          <label for="priority">Priority</label>
+          <select id="priority">
+            <option value="low">Low</option>
+            <option value="medium" selected>Medium</option>
+            <option value="high">High</option>
+          </select>
+        </div>
+        <div class="field">
+          <label for="notes">Notes (optional)</label>
+          <textarea id="notes"></textarea>
+        </div>
+        <button type="submit" class="btn">Save Task</button>
+        <button type="button" class="btn-ghost" id="cancel-form-btn" style="padding:0.6rem 1.1rem; border-width:1px;">Cancel</button>
+      </form>
+    </div>
+
+    <div class="toolbar">
+      <input type="text" id="search-input" placeholder="Search by title or subject…">
+      <select id="filter-status">
+        <option value="all">All statuses</option>
+        <option value="pending">Pending</option>
+        <option value="done">Done</option>
+      </select>
+      <select id="filter-subject">
+        <option value="all">All subjects</option>
+      </select>
+    </div>
+
+    <table class="task-table">
+      <thead>
+        <tr>
+          <th></th>
+          <th>Title</th>
+          <th>Subject</th>
+          <th>Due date</th>
+          <th>Priority</th>
+          <th>Status</th>
+          <th>Actions</th>
+        </tr>
+      </thead>
+      <tbody id="task-table-body">
+        <tr><td colspan="7">Loading…</td></tr>
+      </tbody>
+    </table>
+    <div id="empty-state" class="empty-state" style="display:none; margin-top:1rem;">
+      No tasks match your search/filter. Try adjusting them, or add a new task.
+    </div>
+  </main>
+</div>
+
+<script type="module">
+  import { requireAuth, logoutUser } from "./js/auth.js";
+  import { getUserTasks, addTask, updateTask, deleteTask, toggleTaskStatus, isOverdue } from "./js/tasks.js";
+
+  document.getElementById("logout-btn").addEventListener("click", logoutUser);
+
+  let currentUid = null;
+  let allTasks = [];
+
+  const tableBody = document.getElementById("task-table-body");
+  const emptyState = document.getElementById("empty-state");
+  const searchInput = document.getElementById("search-input");
+  const filterStatus = document.getElementById("filter-status");
+  const filterSubject = document.getElementById("filter-subject");
+  const formCard = document.getElementById("task-form-card");
+  const taskForm = document.getElementById("task-form");
+  const formError = document.getElementById("task-form-error");
+
+  requireAuth(async (user, profile) => {
+    currentUid = user.id;
+    document.getElementById("user-name").textContent = profile?.name || user.email;
+    if (profile?.role === "admin") document.getElementById("admin-link").style.display = "block";
+    await loadTasks();
+  });
+
+  async function loadTasks() {
+    allTasks = await getUserTasks(currentUid);
+    populateSubjectFilter();
+    render();
+  }
+
+  function populateSubjectFilter() {
+    const subjects = [...new Set(allTasks.map(t => t.subject).filter(Boolean))];
+    filterSubject.innerHTML = `<option value="all">All subjects</option>` +
+      subjects.map(s => `<option value="${escapeHtml(s)}">${escapeHtml(s)}</option>`).join("");
+  }
+
+  function render() {
+    const searchTerm = searchInput.value.trim().toLowerCase();
+    const statusVal = filterStatus.value;
+    const subjectVal = filterSubject.value;
+
+    let filtered = allTasks.filter(t => {
+      const matchesSearch = !searchTerm ||
+        t.title.toLowerCase().includes(searchTerm) ||
+        (t.subject || "").toLowerCase().includes(searchTerm);
+      const matchesStatus = statusVal === "all" || t.status === statusVal;
+      const matchesSubject = subjectVal === "all" || t.subject === subjectVal;
+      return matchesSearch && matchesStatus && matchesSubject;
+    });
+
+    if (filtered.length === 0) {
+      tableBody.innerHTML = "";
+      emptyState.style.display = "block";
+      return;
+    }
+    emptyState.style.display = "none";
+
+    tableBody.innerHTML = filtered.map(t => `
+      <tr class="${t.status === 'done' ? 'done' : ''}">
+        <td><input type="checkbox" data-toggle="${t.id}" data-status="${t.status}" ${t.status === 'done' ? 'checked' : ''}></td>
+        <td>${escapeHtml(t.title)}</td>
+        <td>${escapeHtml(t.subject)}</td>
+        <td>${t.dueDate}${isOverdue(t) ? ' <span class="pill priority-high">Overdue</span>' : ''}</td>
+        <td><span class="pill priority-${t.priority}">${t.priority}</span></td>
+        <td><span class="pill status-${t.status}">${t.status}</span></td>
+        <td class="row-actions">
+          <button data-edit="${t.id}">Edit</button>
+          <button data-delete="${t.id}" class="delete-link">Delete</button>
+        </td>
+      </tr>
+    `).join("");
+
+    tableBody.querySelectorAll('[data-toggle]').forEach(cb => {
+      cb.addEventListener('change', async () => {
+        await toggleTaskStatus(cb.dataset.toggle, cb.dataset.status);
+        await loadTasks();
+      });
+    });
+    tableBody.querySelectorAll('[data-edit]').forEach(btn => {
+      btn.addEventListener('click', () => openEditForm(btn.dataset.edit));
+    });
+    tableBody.querySelectorAll('[data-delete]').forEach(btn => {
+      btn.addEventListener('click', async () => {
+        if (confirm('Delete this task? This cannot be undone.')) {
+          await deleteTask(btn.dataset.delete);
+          await loadTasks();
+        }
+      });
+    });
+  }
+
+  searchInput.addEventListener('input', render);
+  filterStatus.addEventListener('change', render);
+  filterSubject.addEventListener('change', render);
+
+  document.getElementById('new-task-btn').addEventListener('click', () => {
+    taskForm.reset();
+    document.getElementById('task-id').value = "";
+    document.getElementById('form-title').textContent = "New Task";
+    formError.classList.remove('visible');
+    formCard.style.display = 'block';
+  });
+
+  document.getElementById('cancel-form-btn').addEventListener('click', () => {
+    formCard.style.display = 'none';
+  });
+
+  function openEditForm(taskId) {
+    const t = allTasks.find(x => x.id === taskId);
+    if (!t) return;
+    document.getElementById('task-id').value = t.id;
+    document.getElementById('title').value = t.title;
+    document.getElementById('subject').value = t.subject;
+    document.getElementById('dueDate').value = t.dueDate;
+    document.getElementById('priority').value = t.priority;
+    document.getElementById('notes').value = t.notes || "";
+    document.getElementById('form-title').textContent = "Edit Task";
+    formError.classList.remove('visible');
+    formCard.style.display = 'block';
+    window.scrollTo({ top: 0, behavior: 'smooth' });
+  }
+
+  taskForm.addEventListener('submit', async (e) => {
+    e.preventDefault();
+    const id = document.getElementById('task-id').value;
+    const fields = {
+      title: document.getElementById('title').value.trim(),
+      subject: document.getElementById('subject').value.trim(),
+      dueDate: document.getElementById('dueDate').value,
+      priority: document.getElementById('priority').value,
+      notes: document.getElementById('notes').value.trim()
+    };
+
+    if (!fields.title || !fields.dueDate) {
+      formError.textContent = "Title and due date are required.";
+      formError.classList.add('visible');
+      return;
+    }
+    
+    try {
+      if (id) {
+        await updateTask(id, fields);
+      } else {
+        await addTask(currentUid, fields);
+      }
+      formCard.style.display = 'none';
+      await loadTasks();
+    } catch (err) {
+      formError.textContent = err.message || "Could not save task.";
+      formError.classList.add('visible');
+    }
+  });
+
+  function escapeHtml(str) {
+    const div = document.createElement("div");
+    div.textContent = str ?? "";
+    return div.innerHTML;
+  }
+</script>
+
+</body>
+</html>

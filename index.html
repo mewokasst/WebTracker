@@ -1,0 +1,59 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>TaskTrack — Log In</title>
+<link rel="stylesheet" href="./css/style.css">
+</head>
+<body>
+
+<div class="auth-shell">
+  <div class="auth-card">
+    <div class="eyebrow">TaskTrack</div>
+    <h1>Welcome back</h1>
+    <p>Log in to see your tasks and upcoming deadlines.</p>
+
+    <div id="error-box" class="form-error"></div>
+
+    <form id="login-form">
+      <div class="field">
+        <label for="email">Email</label>
+        <input type="email" id="email" required>
+      </div>
+      <div class="field">
+        <label for="password">Password</label>
+        <input type="password" id="password" required>
+      </div>
+      <button type="submit" class="btn btn-block">Log In</button>
+    </form>
+
+    <p class="form-hint">Don't have an account? <a href="register.html">Register here</a></p>
+  </div>
+</div>
+
+<script type="module">
+  import { loginUser, friendlyAuthError } from "./js/auth.js";
+
+  const form = document.getElementById("login-form");
+  const errorBox = document.getElementById("error-box");
+
+  form.addEventListener("submit", async (e) => {
+    e.preventDefault();
+    errorBox.classList.remove("visible");
+
+    const email = document.getElementById("email").value.trim();
+    const password = document.getElementById("password").value;
+
+    try {
+      await loginUser({ email, password });
+      window.location.href = "dashboard.html";
+    } catch (err) {
+      errorBox.textContent = friendlyAuthError(err);
+      errorBox.classList.add("visible");
+    }
+  });
+</script>
+
+</body>
+</html>

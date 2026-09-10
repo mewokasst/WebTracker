@@ -1,0 +1,122 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>TaskTrack — Profile</title>
+<link rel="stylesheet" href="./css/style.css">
+</head>
+<body>
+
+<div class="app-shell">
+  <aside class="sidebar">
+    <div class="brand">TaskTrack</div>
+    <nav>
+      <a href="dashboard.html">Dashboard</a>
+      <a href="tasks.html">My Tasks</a>
+      <a href="profile.html" class="active">Profile</a>
+      <a href="admin.html" id="admin-link" style="display:none;">Admin Panel</a>
+    </nav>
+    <div class="user-block">
+      <div id="user-name">Loading…</div>
+      <button class="logout-btn" id="logout-btn">Log out</button>
+    </div>
+  </aside>
+
+  <main class="main">
+    <div class="page-header">
+      <h1>Profile</h1>
+    </div>
+
+    <div class="card" style="max-width: 480px;">
+      <div id="form-error" class="form-error"></div>
+      <div id="form-success" class="form-error" style="background:#E2EBE0; color:#21391F; border-color:#2F5233;"></div>
+      <form id="profile-form">
+        <div class="field">
+          <label for="name">Full name</label>
+          <input type="text" id="name" required>
+        </div>
+        <div class="field">
+          <label>Email</label>
+          <input type="text" id="email" disabled>
+        </div>
+        <div class="field">
+          <label>Role</label>
+          <input type="text" id="role" disabled>
+        </div>
+        <button type="submit" class="btn">Save Changes</button>
+      </form>
+    </div>
+
+    <div class="summary-row mt-lg">
+      <div class="summary-card">
+        <div class="num" id="stat-total">–</div>
+        <div class="label">Total tasks</div>
+      </div>
+      <div class="summary-card">
+        <div class="num" id="stat-done">–</div>
+        <div class="label">Completed</div>
+      </div>
+      <div class="summary-card">
+        <div class="num" id="stat-rate">–</div>
+        <div class="label">Completion rate</div>
+      </div>
+    </div>
+  </main>
+</div>
+
+<script type="module">
+  import { requireAuth, logoutUser } from "./js/auth.js";
+  import { supabase } from "./js/supabase-config.js";
+  import { getUserTasks } from "./js/tasks.js";
+
+  document.getElementById("logout-btn").addEventListener("click", logoutUser);
+
+  let currentUid = null;
+
+  requireAuth(async (user, profile) => {
+    currentUid = user.id;
+    document.getElementById("user-name").textContent = profile?.name || user.email;
+    if (profile?.role === "admin") document.getElementById("admin-link").style.display = "block";
+
+    document.getElementById("name").value = profile?.name || "";
+    document.getElementById("email").value = user.email;
+    document.getElementById("role").value = profile?.role || "student";
+
+    const tasks = await getUserTasks(user.id);
+    const done = tasks.filter(t => t.status === "done").length;
+    document.getElementById("stat-total").textContent = tasks.length;
+    document.getElementById("stat-done").textContent = done;
+    document.getElementById("stat-rate").textContent =
+      tasks.length ? Math.round((done / tasks.length) * 100) + "%" : "0%";
+  });
+
+  document.getElementById("profile-form").addEventListener("submit", async (e) => {
+    e.preventDefault();
+    const errorBox = document.getElementById("form-error");
+    const successBox = document.getElementById("form-success");
+    errorBox.classList.remove("visible");
+    successBox.classList.remove("visible");
+
+    const name = document.getElementById("name").value.trim();
+    if (!name) {
+      errorBox.textContent = "Name cannot be empty.";
+      errorBox.classList.add("visible");
+      return;
+    }
+
+    try {
+      const { error } = await supabase.from("profiles").update({ name }).eq("id", currentUid);
+      if (error) throw error;
+      document.getElementById("user-name").textContent = name;
+      successBox.textContent = "Profile updated.";
+      successBox.classList.add("visible");
+    } catch (err) {
+      errorBox.textContent = "Could not save changes.";
+      errorBox.classList.add("visible");
+    }
+  });
+</script>
+
+</body>
+</html>

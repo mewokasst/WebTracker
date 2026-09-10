@@ -1,0 +1,155 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>TaskTrack — Admin Panel</title>
+<link rel="stylesheet" href="./css/style.css">
+</head>
+<body>
+
+<div class="app-shell">
+  <aside class="sidebar">
+    <div class="brand">TaskTrack</div>
+    <nav>
+      <a href="dashboard.html">Dashboard</a>
+      <a href="tasks.html">My Tasks</a>
+      <a href="profile.html">Profile</a>
+      <a href="admin.html" class="active">Admin Panel</a>
+    </nav>
+    <div class="user-block">
+      <div id="user-name">Loading…</div>
+      <button class="logout-btn" id="logout-btn">Log out</button>
+    </div>
+  </aside>
+
+  <main class="main">
+    <div id="access-denied" style="display:none;">
+      <h1>Admin Panel</h1>
+      <div class="card">
+        <p>Your account does not have admin access. Shared deadlines can only be posted by admin accounts.</p>
+        <p class="text-muted">To make an account an admin: open the Table Editor in your Supabase dashboard, find the user's row in the "profiles" table, and change its "role" column from "student" to "admin".</p>
+      </div>
+    </div>
+
+    <div id="admin-content" style="display:none;">
+      <div class="page-header">
+        <h1>Admin Panel — Shared Deadlines</h1>
+      </div>
+
+      <div class="card" style="margin-bottom: 1.5rem;">
+        <h3>Post a new shared deadline</h3>
+        <div id="form-error" class="form-error"></div>
+        <form id="deadline-form">
+          <div class="field">
+            <label for="title">Title</label>
+            <input type="text" id="title" required>
+          </div>
+          <div class="field">
+            <label for="scope">Subject / scope</label>
+            <input type="text" id="scope" placeholder="e.g. All 2nd Year IT Students">
+          </div>
+          <div class="field">
+            <label for="dueDate">Due date</label>
+            <input type="date" id="dueDate" required>
+          </div>
+          <div class="field">
+            <label for="description">Description (optional)</label>
+            <textarea id="description"></textarea>
+          </div>
+          <button type="submit" class="btn">Post Deadline</button>
+        </form>
+      </div>
+
+      <h3>Currently posted</h3>
+      <div id="deadlines-list">
+        <p class="text-muted">Loading…</p>
+      </div>
+    </div>
+  </main>
+</div>
+
+<script type="module">
+  import { requireAuth, logoutUser } from "./js/auth.js";
+  import { addSharedDeadline, deleteSharedDeadline, getAllSharedDeadlines } from "./js/shared-deadlines.js";
+
+  document.getElementById("logout-btn").addEventListener("click", logoutUser);
+
+  let currentUid = null;
+
+  requireAuth(async (user, profile) => {
+    currentUid = user.id;
+    document.getElementById("user-name").textContent = profile?.name || user.email;
+
+    if (profile?.role !== "admin") {
+      document.getElementById("access-denied").style.display = "block";
+      return;
+    }
+    document.getElementById("admin-content").style.display = "block";
+    await loadDeadlines();
+  });
+
+  async function loadDeadlines() {
+    const list = await getAllSharedDeadlines();
+    const el = document.getElementById("deadlines-list");
+    if (list.length === 0) {
+      el.innerHTML = `<div class="empty-state">No shared deadlines posted yet.</div>`;
+      return;
+    }
+    el.innerHTML = list.map(d => `
+      <div class="deadline-item" style="display:flex; justify-content:space-between; align-items:center;">
+        <div>
+          <strong>${escapeHtml(d.title)}</strong>
+          <div class="meta">${escapeHtml(d.subjectOrScope)} · due ${d.dueDate}</div>
+        </div>
+        <button data-delete="${d.id}" class="btn-danger" style="padding:0.3rem 0.7rem; font-size:0.85rem;">Delete</button>
+      </div>
+    `).join("");
+
+    el.querySelectorAll('[data-delete]').forEach(btn => {
+      btn.addEventListener('click', async () => {
+        if (confirm('Delete this shared deadline?')) {
+          await deleteSharedDeadline(btn.dataset.delete);
+          await loadDeadlines();
+        }
+      });
+    });
+  }
+
+  document.getElementById("deadline-form").addEventListener("submit", async (e) => {
+    e.preventDefault();
+    const errorBox = document.getElementById("form-error");
+    errorBox.classList.remove("visible");
+
+    const fields = {
+      title: document.getElementById("title").value.trim(),
+      subjectOrScope: document.getElementById("scope").value.trim(),
+      dueDate: document.getElementById("dueDate").value,
+      description: document.getElementById("description").value.trim()
+    };
+
+    if (!fields.title || !fields.dueDate) {
+      errorBox.textContent = "Title and due date are required.";
+      errorBox.classList.add("visible");
+      return;
+    }
+
+    try {
+      await addSharedDeadline(currentUid, fields);
+      document.getElementById("deadline-form").reset();
+      await loadDeadlines();
+    } catch (err) {
+      errorBox.textContent = "Could not post deadline.";
+      errorBox.classList.add("visible");
+    }
+  });
+
+  function escapeHtml(str) {
+    const div = document.createElement("div");
+    div.textContent = str ?? "";
+    return div.innerHTML;
+  }
+</script>
+
+</body>
+</html>
